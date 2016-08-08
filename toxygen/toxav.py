@@ -281,8 +281,8 @@ class ToxAV:
         """
         toxav_err_send_frame = c_int()
         result = self.libtoxav.toxav_video_send_frame(self._toxav_pointer, c_uint32(friend_number), c_uint16(width),
-                                                       c_uint16(height), c_char_p(y), c_char_p(u), c_char_p(v),
-                                                       byref(toxav_err_send_frame))
+                                                      c_uint16(height), c_char_p(y), c_char_p(u), c_char_p(v),
+                                                      byref(toxav_err_send_frame))
         toxav_err_send_frame = toxav_err_send_frame.value
         if toxav_err_send_frame == TOXAV_ERR_SEND_FRAME['OK']:
             return bool(result)
