@@ -9,10 +9,52 @@ import cv2
 
 class Call:
 
-    def __init__(self, audio=False, video=False):
-        self.audio = audio
-        self.video = video
+    def __init__(self, out_audio, out_video, in_audio=False, in_video=False):
+        self._in_audio = in_audio
+        self._in_video = in_video
+        self._out_audio = out_audio
+        self._out_video = out_video
         # TODO: add widget for call
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # Audio
+    # -----------------------------------------------------------------------------------------------------------------
+
+    def get_in_audio(self):
+        return self._in_audio
+
+    def set_in_audio(self, value):
+        self._in_audio = value
+
+    in_audio = property(get_in_audio, set_in_audio)
+
+    def get_out_audio(self):
+        return self._out_audio
+
+    def set_out_audio(self, value):
+        self._out_audio = value
+
+    out_audio = property(get_out_audio, set_out_audio)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # Video
+    # -----------------------------------------------------------------------------------------------------------------
+
+    def get_in_video(self):
+        return self._in_video
+
+    def set_in_video(self, value):
+        self._in_video = value
+
+    in_video = property(get_in_video, set_in_video)
+
+    def get_out_video(self):
+        return self._out_video
+
+    def set_out_video(self, value):
+        self._in_video = value
+
+    out_video = property(get_out_video, set_out_video)
 
 
 class AV:
@@ -52,11 +94,11 @@ class AV:
 
     def __call__(self, friend_number, audio, video):
         """Call friend with specified number"""
-        self._toxav.call(friend_number, 32 if audio else 0, 5000 if video else 0)
-        self._calls[friend_number] = Call(audio, video)
         self.start_audio_thread()
         if video:
             self.start_video_thread()
+        self._calls[friend_number] = Call(audio, video)
+        self._toxav.call(friend_number, 32 if audio else 0, 5000 if video else 0)
 
     def accept_call(self, friend_number, audio_enabled, video_enabled):
 
@@ -67,7 +109,6 @@ class AV:
                 self.start_audio_thread()
             if video_enabled:
                 self.start_video_thread()
-
 
     def finish_call(self, friend_number, by_friend=False):
 
@@ -83,13 +124,10 @@ class AV:
         """
         New call state
         """
-        pass  # TODO: ignore?
-        # if self._running:
-        #
-        #     if state & TOXAV_FRIEND_CALL_STATE['ACCEPTING_A']:
-        #         self._calls[friend_number].audio = True
-        #     if state & TOXAV_FRIEND_CALL_STATE['ACCEPTING_V']:
-        #         self._calls[friend_number].video = True
+        call = self._calls[friend_number]
+        call.in_audio = state | TOXAV_FRIEND_CALL_STATE['SENDING_A']
+        call.in_video = state | TOXAV_FRIEND_CALL_STATE['SENDING_V']
+        # TODO: disable sending?
 
     # -----------------------------------------------------------------------------------------------------------------
     # Threads
@@ -136,14 +174,12 @@ class AV:
     def start_video_thread(self):
         if self._video_thread is not None:
             return
-
         self._video_running = True
 
         self._video = cv2.VideoCapture(0)
         self._video.set(cv2.CAP_PROP_FPS, 25)
         self._video.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self._video.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
         self._video_thread = threading.Thread(target=self.send_video)
         self._video_thread.start()
 
@@ -190,7 +226,7 @@ class AV:
                 pcm = self._audio_stream.read(self._audio_sample_count)
                 if pcm:
                     for friend_num in self._calls:
-                        if self._calls[friend_num].audio:
+                        if self._calls[friend_num].out_audio:
                             try:
                                 self._toxav.audio_send_frame(friend_num, pcm, self._audio_sample_count,
                                                              self._audio_channels, self._audio_rate)
@@ -202,25 +238,26 @@ class AV:
             time.sleep(0.01)
 
     def send_video(self):
+        # TODO: fix sending on windows and record video
         while self._video_running:
             try:
-                result, frame = self._video.read()
-                if result:
-                    height, width, channels = frame.shape
-                    for friend_num in self._calls:
-                        if self._calls[friend_num].video:
-                            try:
-                                y, u, v = convert_bgr_to_yuv(frame)
-                                self._toxav.video_send_frame(friend_num, width, height, y, u, v)
-                            except Exception as e:
-                                print('Exc0', e)
+                # result, frame = self._video.read()
+                # if result:
+                #     height, width, channels = frame.shape
+                for friend_num in self._calls:
+                    if self._calls[friend_num].out_video:
+                        try:
+                            self._toxav.video_send_frame(friend_num, 4, 2, bytes([1] * 8),
+                                                         bytes([50] * 2),
+                                                         bytes([2] * 2))
+                        except Exception as e:
+                            print('Exc0', e)
             except Exception as e:
                 print('Exc:', e)
 
-        time.sleep(0.01)
+            time.sleep(0.04)
 
 
-def convert_bgr_to_yuv(frame):
+def convert_bgr_to_yuv(frame, width, height):
     # TODO: bgr => yuv
-    #print('fr', frame.tostring())
     return bytes([0]), bytes([0]), bytes([0])
